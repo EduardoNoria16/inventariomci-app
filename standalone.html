@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventario MCI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Custom styles to prevent zoom on mobile inputs */
+    input[type="text"], input[type="email"], input[type="password"] {
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800 font-sans selection:bg-blue-200">
+
+  <div id="app" class="max-w-md mx-auto bg-white min-h-screen shadow-md flex flex-col">
+    <!-- UI is rendered here -->
+  </div>
+
+  <!-- Firebase v9 via ES Modules -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getFirestore, collection, query, onSnapshot, addDoc, deleteDoc, doc, updateDoc, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAdmJ0hHgLdoqbILpcAmAIMufwrX4rAriI",
+      authDomain: "inventario-mci-4e2dd.firebaseapp.com",
+      projectId: "inventario-mci-4e2dd",
+      storageBucket: "inventario-mci-4e2dd.firebasestorage.app",
+      messagingSenderId: "303390122006",
+      appId: "1:303390122006:web:189d968fec727e77285537",
+      measurementId: "G-S3W15GSQXR"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const appDiv = document.getElementById('app');
+    let currentUser = null;
+    let isAdmin = false;
+    let materials = [];
+    let unsubscribeMaterials = null;
+
+    // Render Functions
+    function render() {
+      if (!currentUser) {
+        renderLogin();
+      } else {
+        renderInventory();
+      }
+    }
+
+    function renderLogin() {
+      appDiv.innerHTML = `
+        <div class="flex-1 flex flex-col justify-center px-6 py-12">
+          <div class="sm:mx-auto sm:w-full sm:max-w-sm text-center">
+            <div class="mx-auto bg-blue-600 rounded-full h-16 w-16 flex items-center justify-center mb-4 text-white shadow-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            </div>
+            <h2 class="text-2xl font-bold leading-9 tracking-tight text-gray-900">Inventario Obra</h2>
+            <p class="text-sm text-gray-500 mt-1">Acceso para personal</p>
+          </div>
+          <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-sm">
+            <form id="loginForm" class="space-y-6">
+              <div>
+                <label for="email" class="block text-sm font-medium leading-6 text-gray-900">Correo electrónico</label>
+                <div class="mt-2">
+                  <input id="email" name="email" type="email" required class="block w-full rounded-xl border-0 py-3 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6">
+                </div>
+              </div>
+              <div>
+                <label for="password" class="block text-sm font-medium leading-6 text-gray-900">Contraseña</label>
+                <div class="mt-2">
+                  <input id="password" name="password" type="password" required class="block w-full rounded-xl border-0 py-3 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6">
+                </div>
+              </div>
+              <div>
+                <button type="submit" class="flex w-full justify-center rounded-xl bg-blue-600 px-3 py-3.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">Entrar</button>
+              </div>
+              <div id="loginError" class="text-red-500 text-sm text-center hidden"></div>
+            </form>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const btn = e.target.querySelector('button');
+        btn.innerHTML = 'Iniciando...';
+        btn.disabled = true;
+        
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+          // onAuthStateChanged will handle the redirect
+        } catch (error) {
+          console.error(error);
+          const errorDiv = document.getElementById('loginError');
+          errorDiv.classList.remove('hidden');
+          errorDiv.innerText = 'Error al iniciar sesión. Verifica tus datos.';
+          btn.innerHTML = 'Entrar';
+          btn.disabled = false;
+        }
+      });
+    }
+
+    function renderInventory() {
+      appDiv.innerHTML = `
+        <header class="bg-blue-600 text-white px-4 py-4 shadow-md flex justify-between items-center sticky top-0 z-10">
+          <div>
+            <h1 class="text-xl font-bold">Inventario</h1>
+            <p class="text-xs text-blue-100 opacity-90">${isAdmin ? 'Modo Administrador' : 'Modo Trabajador'} - ${currentUser.email}</p>
+          </div>
+          <button id="logoutBtn" class="p-2 rounded-full hover:bg-blue-700 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
+        </header>
+
+        <main class="flex-1 overflow-y-auto p-4 pb-24">
+          ${isAdmin ? `
+            <div class="bg-gray-50 rounded-2xl border border-gray-200 p-4 mb-6">
+              <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">Agregar Material</h3>
+              <form id="addMaterialForm" class="flex gap-2">
+                <input type="text" id="newMaterialName" required placeholder="Ej. Botes de resina..." class="flex-1 rounded-xl border-0 py-3 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6">
+                <button type="submit" class="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </form>
+            </div>
+          ` : ''}
+
+          <div id="materialsList" class="space-y-4">
+            <div class="flex justify-center p-8">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          </div>
+        </main>
+      `;
+
+      document.getElementById('logoutBtn').addEventListener('click', () => {
+        signOut(auth);
+      });
+
+      if (isAdmin) {
+        document.getElementById('addMaterialForm').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const input = document.getElementById('newMaterialName');
+          const name = input.value.trim();
+          if (name) {
+            input.disabled = true;
+            await addDoc(collection(db, 'materials'), {
+              name,
+              status: 'Hay',
+              createdAt: Date.now()
+            });
+            input.value = '';
+            input.disabled = false;
+            input.focus();
+          }
+        });
+      }
+
+      loadMaterials();
+    }
+
+    function loadMaterials() {
+      const q = query(collection(db, 'materials'), orderBy('createdAt', 'desc'));
+      
+      if (unsubscribeMaterials) unsubscribeMaterials();
+      
+      unsubscribeMaterials = onSnapshot(q, (snapshot) => {
+        materials = [];
+        snapshot.forEach((doc) => {
+          materials.push({ id: doc.id, ...doc.data() });
+        });
+        renderMaterialsList();
+      }, (error) => {
+        console.error("Error cargando materiales:", error);
+        document.getElementById('materialsList').innerHTML = '<div class="p-4 bg-red-50 text-red-600 rounded-xl text-center">Error al cargar datos. Verifica permisos.</div>';
+      });
+    }
+
+    function renderMaterialsList() {
+      const listDiv = document.getElementById('materialsList');
+      if (materials.length === 0) {
+        listDiv.innerHTML = '<div class="text-center py-10 text-gray-500">No hay materiales en el inventario.</div>';
+        return;
+      }
+
+      let html = '';
+      materials.forEach(mat => {
+        const isHay = mat.status === 'Hay';
+        const isPorAgotarse = mat.status === 'Por agotarse';
+        const isAgotado = mat.status === 'Agotado';
+
+        html += \`
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="p-4 flex justify-between items-center border-b border-gray-50">
+              <h3 class="font-semibold text-lg text-gray-800">\${mat.name}</h3>
+              \${isAdmin ? \`
+                <button onclick="deleteMaterial('\${mat.id}')" class="text-gray-400 hover:text-red-500 p-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              \` : ''}
+            </div>
+            
+            <div class="p-3 grid grid-cols-3 gap-2 bg-gray-50/50">
+              <button onclick="updateStatus('\${mat.id}', 'Hay')" 
+                class="flex flex-col items-center justify-center py-3 px-1 rounded-xl transition-all \${isHay ? 'bg-green-100 text-green-700 ring-2 ring-green-500 ring-inset shadow-sm' : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="text-xs font-semibold">Hay</span>
+              </button>
+              
+              <button onclick="updateStatus('\${mat.id}', 'Por agotarse')" 
+                class="flex flex-col items-center justify-center py-3 px-1 rounded-xl transition-all \${isPorAgotarse ? 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-500 ring-inset shadow-sm' : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span class="text-xs font-semibold text-center leading-tight">Por<br>agotarse</span>
+              </button>
+              
+              <button onclick="updateStatus('\${mat.id}', 'Agotado')" 
+                class="flex flex-col items-center justify-center py-3 px-1 rounded-xl transition-all \${isAgotado ? 'bg-red-100 text-red-700 ring-2 ring-red-500 ring-inset shadow-sm' : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="text-xs font-semibold">Agotado</span>
+              </button>
+            </div>
+          </div>
+        \`;
+      });
+
+      listDiv.innerHTML = html;
+    }
+
+    window.updateStatus = async (id, status) => {
+      try {
+        await updateDoc(doc(db, 'materials', id), { status });
+      } catch (error) {
+        console.error("Error al actualizar:", error);
+        alert("Error al actualizar estado. Revisa tu conexión.");
+      }
+    };
+
+    window.deleteMaterial = async (id) => {
+      if (confirm('¿Seguro que deseas eliminar este material?')) {
+        try {
+          await deleteDoc(doc(db, 'materials', id));
+        } catch (error) {
+          console.error("Error al eliminar:", error);
+          alert("Error al eliminar. Revisa tu conexión.");
+        }
+      }
+    };
+
+    // Auth Listener
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      // Definimos administrador temporalmente por si el correo contiene 'admin' 
+      // o ajusta esto según tus necesidades
+      if (user) {
+        isAdmin = user.email.toLowerCase().includes('admin');
+      } else {
+        isAdmin = false;
+        if (unsubscribeMaterials) {
+          unsubscribeMaterials();
+          unsubscribeMaterials = null;
+        }
+      }
+      render();
+    });
+
+  </script>
+</body>
+</html>
