@@ -25,8 +25,9 @@ Instrucciones:
 - Comienza el mensaje saludando explícitamente al "equipo MCI".
 - Genera un resumen directo, profesional pero amigable del inventario.
 - Resalta qué cosas están Agotadas o Por agotarse, pidiendo atención inmediata.
+- Incluye explícitamente una sección llamada "Sugerencias de Compra" donde recomiendes qué materiales deberían comprarse pronto, basándote en la tasa de agotamiento actual (estado "Agotado" y "Por agotarse").
 - Menciona brevemente lo que está en buen estado ("Hay").
-- Usa de 1 a 2 párrafos máximo.
+- Usa de 1 a 3 párrafos y listas viñetas para las sugerencias.
 - Usa negritas (Markdown **) para resaltar los nombres de los materiales y estados importantes.
 - Usa emojis industriales/logísticos para mejor formato visual.
 - Si no hay materiales, menciona que el inventario está vacío de forma educada.`;
