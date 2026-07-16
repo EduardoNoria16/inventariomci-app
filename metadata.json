@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "MCI Inventario",
+  "description": "Sistema de inventario para MCI con IA",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

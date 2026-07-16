@@ -1,0 +1,16 @@
+{
+  "name": "MCI Soluciones Poliméricas",
+  "short_name": "MCI",
+  "description": "Control de Inventario",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png"
+    }
+  ]
+}
