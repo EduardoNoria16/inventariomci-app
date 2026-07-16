@@ -7,9 +7,9 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
-  app.post("/api/ai-summary", async (req, res) => {
+  app.post("/api/inventory-report", async (req, res) => {
     try {
       if (!process.env.GEMINI_API_KEY) {
         return res.status(500).json({ error: "No API key configured." });

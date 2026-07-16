@@ -255,20 +255,35 @@ export default function App() {
     setIsAiLoading(true);
     setAiSummary('');
     try {
-      const res = await fetch('/api/ai-summary', {
+      const res = await fetch('/api/inventory-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ materials })
       });
+      
+      if (!res.ok) {
+        // Try to read as text first to avoid JSON parse errors on HTML error pages
+        const text = await res.text();
+        let errorMessage = `Error del servidor (${res.status}).`;
+        try {
+          const json = JSON.parse(text);
+          if (json.error) errorMessage = json.error;
+        } catch (e) {
+          // It was HTML or non-JSON
+        }
+        setAiSummary(errorMessage);
+        return;
+      }
+
       const data = await res.json();
       if (data.summary) {
         setAiSummary(data.summary);
       } else {
         setAiSummary('Ocurrió un error al analizar el inventario. Intenta de nuevo.');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setAiSummary('Error de red. No se pudo contactar a la inteligencia artificial.');
+      setAiSummary(`Error de red: ${e.message || 'No se pudo contactar al servidor'}.`);
     } finally {
       setIsAiLoading(false);
     }
